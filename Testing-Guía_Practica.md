@@ -87,6 +87,10 @@ Invoke-RestMethod -Uri 'http://localhost:3000/api/precios/calcular' `
 
 **Preguntas:** ¿qué archivo contiene la regla de cálculo? ¿Qué archivo define la ruta HTTP? ¿En qué se diferencian sus responsabilidades?
 
+> **Respuesta:** la regla de cálculo está en `src/services/precios.ts` y la ruta HTTP en `src/app.ts`. El servicio solo sabe calcular el precio; la ruta lee el body de la petición, llama al servicio y convierte el resultado (o el error) en una respuesta HTTP con su código de estado.
+>
+> Nota: en el código la ruta de salud es `GET /salud`, no `/healthy`.
+
 ## 3. Ejecutar las pruebas disponibles
 
 Detené el servidor con `Ctrl+C` o abrí otra terminal en el proyecto. Ejecutá:
@@ -107,6 +111,8 @@ En `tests/precios.test.ts` identificá estas instrucciones:
 
 Leé la prueba que contiene `calcularPrecioFinal(1000, 150)`. ¿Qué comportamiento exige? ¿Qué hace realmente el código? **Todavía no modifiques la implementación.**
 
+> **Respuesta:** la prueba exige que un descuento mayor al 100 % lance un `RangeError`. El código no valida nada: hace la cuenta y devuelve `-500`. Por eso la primera ejecución dio 4 pruebas OK y 1 fallida.
+
 ## 4. Interpretar la falla
 
 La prueba inicial incluye la siguiente comprobación:
@@ -125,6 +131,12 @@ Respondé antes de continuar:
 2. ¿Por qué ese resultado no cumple la regla de negocio?
 3. ¿Por qué la prueba falla si la función terminó de ejecutarse?
 
+> **Respuestas:**
+>
+> 1. Devuelve `-500` (1000 - 1000 * 150 / 100).
+> 2. Un descuento no puede superar el precio; el total queda negativo, cosa que no tiene sentido en una venta.
+> 3. Porque la prueba espera que se lance un error. Que la función termine normalmente y devuelva un número es justo lo que no debería pasar.
+
 ## 5. Corregir la función de cálculo
 
 Modificá **solo** `src/services/precios.ts`. Antes de realizar la operación, incorporá comprobaciones para que:
@@ -142,6 +154,8 @@ npm test
 ```
 
 Ahora deberían pasar las **cinco pruebas**. Si alguna falla, leé el resultado de Vitest y revisá qué comportamiento espera.
+
+> **Resultado:** agregué las validaciones con `Number.isFinite` y comparaciones de rango antes de la fórmula. Pasan las 5 pruebas.
 
 ## 6. Agregar pruebas unitarias
 
@@ -164,6 +178,8 @@ it('devuelve cero con un descuento del 100 %', () => {
 Escribí las otras dos pruebas siguiendo el modelo de `toThrow(RangeError)` que ya existe. Ejecutá `npm test` y verificá el resultado.
 
 **Desafío adicional:** agregá una prueba para `NaN` como precio. ¿La validación actual lo rechaza?
+
+> **Respuesta:** sí. `Number.isFinite(NaN)` devuelve `false`, así que se lanza `RangeError`. Agregué la prueba y, junto con las tres de la tabla, quedan 9 pruebas pasando.
 
 ## 7. Primera prueba de integración HTTP
 
@@ -199,6 +215,8 @@ El código `400` indica que la petición contiene datos que el servidor no acept
 
 Ejecutá `npm test` nuevamente. Explicá por qué esta comprobación es de **integración** y no solamente una prueba unitaria.
 
+> **Respuesta:** no se llama a la función directamente, se envía una petición HTTP a la app de Express. Participan la ruta, el parseo del JSON, el servicio y el manejo de errores que traduce el `RangeError` a un 400. Lo que se prueba es que esas partes funcionen juntas. Con esta prueba son 10 en total y todas pasan.
+
 ## 8. Diferenciar pruebas y verificación de tipos
 
 Ejecutá:
@@ -210,6 +228,8 @@ npm run typecheck
 Este comando usa TypeScript para analizar tipos, pero **no ejecuta las pruebas**. Por otra parte, Node puede ejecutar los archivos `.ts` compatibles directamente, pero no comprueba sus tipos durante esa ejecución.
 
 **Pregunta:** ¿por qué conviene utilizar tanto `typecheck` como `npm test`?
+
+> **Respuesta:** detectan problemas distintos. `npm test` ejecuta el código y verifica comportamientos, pero solo los casos que escribimos. `typecheck` no ejecuta nada, analiza los tipos de todo el código; como Node corre los `.ts` borrando los tipos, un error de tipos pasaría desapercibido si no se corre `tsc`. En este proyecto `typecheck` terminó sin errores.
 
 ## 9. Integración continua: extensión opcional
 
@@ -224,16 +244,18 @@ Si querés probarlo en GitHub:
 
 En la versión actualizada del proyecto, el workflow utiliza `npm install`. Después de generar y versionar `package-lock.json`, se recomienda cambiarlo a `npm ci` para obtener instalaciones reproducibles.
 
+> **Resultado:** versioné `package-lock.json` y cambié el workflow a `npm ci`. El workflow está dentro de `demo_practica/.github/`, y GitHub Actions solo lee los que están en el `.github/` de la raíz del repositorio, así que para que se ejecute habría que moverlo a la raíz y agregar `working-directory: demo_practica`.
+
 ## 10. Registro de resultados
 
 | Comprobación | Resultado | Observación |
 | --- | --- | --- |
-| Respuesta de `GET /healthy` | | |
-| Primera ejecución de `npm test` | | |
-| Corrección del servicio | | |
-| Nuevas pruebas unitarias | | |
-| Prueba de integración HTTP 400 | | |
-| Verificación `npm run typecheck` | | |
+| Respuesta de `GET /healthy` | `{"estado":"ok"}` | En el código la ruta es `/salud`. |
+| Primera ejecución de `npm test` | 4 pasan, 1 falla | Falla "rechaza descuentos superiores al 100 %": devolvía -500 en vez de lanzar error. |
+| Corrección del servicio | 5 pasan | Validación de precio y descuento con `Number.isFinite` y rangos. |
+| Nuevas pruebas unitarias | 9 pasan | Descuento 100 %, precio negativo, descuento negativo y `NaN`. |
+| Prueba de integración HTTP 400 | 10 pasan | La API responde 400 con la propiedad `error`. |
+| Verificación `npm run typecheck` | Sin errores | |
 
 ## 11. Preguntas de cierre
 
@@ -242,5 +264,13 @@ En la versión actualizada del proyecto, el workflow utiliza `npm install`. Desp
 3. ¿Por qué es útil incluir casos inválidos además de los casos habituales?
 4. ¿Qué parte del sistema comprueba `tests/precios.test.ts` y qué partes comprueba `tests/api.test.ts`?
 5. ¿Qué ventajas ofrece ejecutar las pruebas después de cada modificación?
+
+> **Respuestas:**
+>
+> 1. La comprobación manual depende de que alguien la repita y mire el resultado cada vez. La automatizada se corre con un comando, siempre de la misma forma, y avisa sola si algo dejó de funcionar.
+> 2. `calcularPrecioFinal` no validaba la entrada: con un descuento de 150 % devolvía un total negativo en lugar de lanzar `RangeError`.
+> 3. Porque los errores suelen aparecer en los bordes y en las entradas que no se esperaban. Probando solo casos normales, el problema del 150 % nunca se hubiera visto.
+> 4. `tests/precios.test.ts` comprueba solo la función del servicio. `tests/api.test.ts` comprueba la aplicación Express completa: la ruta, el parseo del body, el servicio y los códigos de estado.
+> 5. Las regresiones se detectan en el momento, cuando todavía se sabe qué cambio las causó, y se puede modificar el código con más confianza.
 
 **Referencias:** [Vitest](https://vitest.dev/guide/) · [Supertest](https://github.com/ladjs/supertest) · [Node.js: TypeScript](https://nodejs.org/api/typescript.html) · [GitHub Actions](https://docs.github.com/actions)
